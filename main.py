@@ -93,9 +93,10 @@ def main():
     
     use_cuda = not no_cuda and torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
-    
+
     model = Net().to(device)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+    train_loader, test_loader = make_data_mnist()
 
     for epoch in range(1, n_epochs + 1):
         train(model, device, train_loader, optimizer, epoch)

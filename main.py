@@ -12,7 +12,7 @@ import numpy as np
 from torchvision import datasets, transforms
 from torch.autograd import Variable
 
-def make_data_mnist():
+def make_data_mnist(batch_size_train=64, batch_size_test = 1000):
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('../data', train=True, download=True,
                        transform=transforms.Compose([
@@ -46,7 +46,7 @@ class Net(nn.Module):
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
-def train(model, device, train_loader, optimizer, epoch):
+def train(model, device, train_loader, optimizer, epoch, log_interval=10):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
@@ -79,23 +79,22 @@ def test(model, device, test_loader):
         100. * correct / len(test_loader.dataset)))
 
 def main():
-    #prepare_args
+    #prepare args
     n_epochs = 3
-    batch_size_train = 64
-    batch_size_test = 1000
-    learning_rate = 0.01
-    momentum = 0.5
-    log_interval = 10
     no_cuda = True
-    random_seed = 1
     torch.backends.cudnn.enabled = False
+    random_seed = 1
     torch.manual_seed(random_seed)
-    
     use_cuda = not no_cuda and torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
-
+    
     model = Net().to(device)
+
+    #prepare optimizer
+    learning_rate = 0.01
+    momentum = 0.5
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+
     train_loader, test_loader = make_data_mnist()
 
     for epoch in range(1, n_epochs + 1):

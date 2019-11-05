@@ -10,6 +10,20 @@ An attack on image classifiers introduces unpredictable behavior for many comput
 
 - MNIST&ImageNet
 
+### Train model
+
+For training model run:
+
+```
+python3 main.py --model model_name --dataset dataset_name
+```
+- Available value for model is example.
+- Available value for dataset is MNIST.
+- Use --train-batch-size, --test-batch-size, --epochs and --log-interval as training/testing settings.
+- Use --lr and --momentum as optimizer settings.
+- Use --save-model and --save-path for saving model in the desired path.
+- Use the --no-cuda flag to train on the CPU rather than the GPU through CUDA.
+
 ### Authors
 
 - [Alex Babushkin](https://github.com/ocelaiwo)

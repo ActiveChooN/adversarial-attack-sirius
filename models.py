@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from memcnn.models.revop import ReversibleBlock
+
 
 class ExampleNet(nn.Module):
     def __init__(self):
@@ -20,3 +22,32 @@ class ExampleNet(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
+
+
+class RevNet(nn.Module):
+    def __init__(self):
+        super(RevNet, self).__init__()
+        self.seq = nn.Sequential(ReversibleBlock(ArbBlock(channels=8),
+                                                 keep_input=False,
+                                                 keep_input_inverse=False,
+                                                 implementation_bwd=0,
+                                                 implementation_fwd=0),
+                                 nn.Flatten())
+
+    def forward(self, x):
+        x = x.view(-1, 16, 7, 7)
+        x = self.seq(x)
+        return F.log_softmax(x[:,:10], dim=1)
+
+
+class ArbBlock(nn.Module):
+    def __init__(self, channels):
+        super(ArbBlock, self).__init__()
+        self.seq = nn.Sequential(nn.Conv2d(in_channels=channels, 
+                                           out_channels=channels,
+                                           kernel_size=(3, 3), padding=1),
+                                 nn.BatchNorm2d(num_features=channels),
+                                 nn.ReLU(inplace=True))
+
+    def forward(self, x):
+        return self.seq(x)

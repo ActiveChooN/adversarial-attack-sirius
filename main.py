@@ -98,6 +98,11 @@ def main():
                         help='For Saving the current Model')
     parser.add_argument('--save-path', type=str, default='',
                         help='Path for Saving the current Model')
+    parser.add_argument('--load-model', action='store_true', default=False,
+                        help='For Loading the Model')
+    parser.add_argument('--load-path', type=str, default='',
+                        help='Path for Loading the Model')
+
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -110,11 +115,14 @@ def main():
     train_loader, test_loader = make_data(args, kwargs)
     model = make_model(args, device)
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-    
+
+    if args.load_model:
+        model.load_state_dict(torch.load(args.load_path))
+
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, optimizer, epoch)
         test(args, model, device, test_loader)
-    
+ 
     if args.save_model:
         torch.save(model.state_dict(), args.save_path)
 

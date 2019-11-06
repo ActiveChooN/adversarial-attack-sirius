@@ -19,10 +19,21 @@ python3 main.py --model model_name --dataset dataset_name
 ```
 - Available value for model is example.
 - Available value for dataset is MNIST.
+- Available value for dataset is SGD.
 - Use --train-batch-size, --test-batch-size, --epochs and --log-interval as training/testing settings.
 - Use --lr and --momentum as optimizer settings.
 - Use --save-model and --save-path for saving model in the desired path.
 - Use the --no-cuda flag to train on the CPU rather than the GPU through CUDA.
+
+### TensorBoard
+
+For starting TensorBoard server run:
+
+```
+tensorboard --logdir=runs
+```
+
+- Use your favorite browser to load the tensorboard page, the address will be shown in the terminal after starting the server.
 
 ### Authors
 

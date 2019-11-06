@@ -1,9 +1,11 @@
 from __future__ import print_function
 import argparse
 import os
-import numpy
+import numpy as np
 from torchvision.datasets import ImageFolder
 import torch
+import torchvision
+from tensorboardX import SummaryWriter
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -21,7 +23,11 @@ def make_model(args, device):
     if args.model == 'example':
         model = ExampleNet().to(device)
     return model
-    
+
+def make_optimizer(args, model):
+    if args.optimizer == 'SGD':
+        return optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+
 def make_data_mnist(args, kwargs):
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('../data', train=True, download=True,
@@ -40,6 +46,7 @@ def make_data_mnist(args, kwargs):
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
+    writer = SummaryWriter()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -51,12 +58,40 @@ def train(args, model, device, train_loader, optimizer, epoch):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
-
+            writer.add_scalar('Loss/train', loss.item(), batch_idx)
+        entry = {
+                    'grad_' + name: np.linalg.norm(p.grad.data.numpy()) 
+                for name, p in model.named_parameters() if 'weight' in name
+            }
+        min_weights = {
+                    'min_weight_' + name: p.min() 
+                for name, p in model.named_parameters() if 'weight' in name
+            }
+        max_weights = {
+                'max_weight_' + name: p.max() 
+            for name, p in model.named_parameters() if 'weight' in name
+        }
+        std_weights = {
+                'std_weight_' + name: p.std() 
+            for name, p in model.named_parameters() if 'weight' in name
+        }
+        for name in entry:
+            writer.add_scalar(name, entry[name], batch_idx)
+        for name in min_weights:
+            writer.add_scalar(name, min_weights[name], batch_idx)
+        for name in max_weights:
+            writer.add_scalar(name, max_weights[name], batch_idx)
+        for name in std_weights:
+            writer.add_scalar(name, std_weights[name], batch_idx)
+        #writer.add_image('Image', data[0], batch_idx)  # Tensor
+        
 
 def test(args, model, device, test_loader):
+    writer = SummaryWriter()
     model.eval()
     test_loss = 0
     correct = 0
+
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
@@ -70,8 +105,10 @@ def test(args, model, device, test_loader):
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
+    writer.add_hparams({'lr': args.lr, 'optimizer': args.optimizer}, {'loss': test_loss, 'accuracy': 100. * correct / len(test_loader.dataset)})
 
 def main():
+    
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--model', choices=['example'], default='example',
@@ -84,6 +121,8 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 10)')
+    parser.add_argument('--optimizer', choices=['SGD'], default='SGD',
+                        help='optimizer')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
@@ -114,7 +153,8 @@ def main():
 
     train_loader, test_loader = make_data(args, kwargs)
     model = make_model(args, device)
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+    optimizer = make_optimizer(args, model)
+    
 
     if args.load_model:
         model.load_state_dict(torch.load(args.load_path))
@@ -122,7 +162,7 @@ def main():
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, optimizer, epoch)
         test(args, model, device, test_loader)
- 
+
     if args.save_model:
         torch.save(model.state_dict(), args.save_path)
 

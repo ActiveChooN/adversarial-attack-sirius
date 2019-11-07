@@ -140,7 +140,7 @@ if __name__ == '__main__':
 		print("Downloading test data")
 		url = "https://pjreddie.com/media/files/mnist_test.csv"
 		r = requests.get(url)
-		with open(Path('mnist_train.csv'), 'wb') as f:
+		with open(Path('mnist_test.csv'), 'wb') as f:
 			f.write(r.content)
 	train = MNISTDataset(Path('mnist_train.csv'))
 	test = MNISTDataset('mnist_test.csv')

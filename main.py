@@ -13,38 +13,47 @@ from PIL import Image
 import numpy as np
 from torchvision import datasets, transforms
 from torch.autograd import Variable
-from models import * 
+from models import ExampleNet
 
-def make_data(args, kwargs):
-    if args.dataset == 'MNIST':
-        return make_data_mnist(args, kwargs)
 
-def make_model(args, device):
-    if args.model == 'example':
-        model = ExampleNet().to(device)
-    return model
+def make_data(dataset, **kwargs):
+    if dataset == "MNIST":
+        return make_data_mnist(**kwargs)
 
-def make_optimizer(args, model):
-    if args.optimizer == 'SGD':
-        return optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-def make_data_mnist(args, kwargs):
+def make_model(model, device):
+    mdl = object()
+    if model == "example":
+        mdl = ExampleNet()
+    return mdl.to(device)
+
+  
+def make_optimizer(model, optimizer, lr, momentum):
+    if optimizer == 'SGD':
+        return optim.SGD(model.parameters(), lr=lr, momentum=momentum)
+
+
+def make_data_mnist(train_batch_size, test_batch_size, num_workers,
+                    pin_memory, **kwargs):
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('../data', train=True, download=True,
                        transform=transforms.Compose([
                            transforms.ToTensor(),
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])),
-        batch_size=args.train_batch_size, shuffle=True, **kwargs)
+        batch_size=train_batch_size, shuffle=True, num_workers=num_workers,
+        pin_memory=pin_memory)
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST('../data', train=False, transform=transforms.Compose([
                            transforms.ToTensor(),
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])),
-        batch_size=args.test_batch_size, shuffle=True, **kwargs)
+        batch_size=test_batch_size, shuffle=True, num_workers=num_workers,
+        pin_memory=pin_memory)
     return train_loader, test_loader
 
-def train(args, model, device, train_loader, optimizer, epoch):
+
+def train(model, device, train_loader, optimizer, epoch, log_interval):
     model.train()
     writer = SummaryWriter()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -54,7 +63,7 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+        if batch_idx % log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
@@ -84,9 +93,9 @@ def train(args, model, device, train_loader, optimizer, epoch):
         for name in std_weights:
             writer.add_scalar(name, std_weights[name], batch_idx)
         #writer.add_image('Image', data[0], batch_idx)  # Tensor
-        
 
-def test(args, model, device, test_loader):
+
+def test(model, device, test_loader):
     writer = SummaryWriter()
     model.eval()
     test_loss = 0
@@ -96,8 +105,10 @@ def test(args, model, device, test_loader):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
-            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            # sum up batch loss
+            test_loss += F.nll_loss(output, target, reduction='sum').item()
+            # get the index of the max log-probability
+            pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
@@ -106,6 +117,7 @@ def test(args, model, device, test_loader):
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
     writer.add_hparams({'lr': args.lr, 'optimizer': args.optimizer}, {'loss': test_loss, 'accuracy': 100. * correct / len(test_loader.dataset)})
+
 
 def main():
     
@@ -132,7 +144,8 @@ def main():
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
+                        help='how many batches to wait before logging ' +
+                        'training status')
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
     parser.add_argument('--save-path', type=str, default='',
@@ -149,22 +162,25 @@ def main():
 
     device = torch.device("cuda" if use_cuda else "cpu")
 
-    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+    kwargs = vars(args)
+
+    kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
 
     train_loader, test_loader = make_data(args, kwargs)
     model = make_model(args, device)
-    optimizer = make_optimizer(args, model)
-    
+    optimizer = make_optimizer(model, optimizer=args.optimizer, lr=args.lr,
+                               momentum=args.momentum)
 
     if args.load_model:
         model.load_state_dict(torch.load(args.load_path))
 
     for epoch in range(1, args.epochs + 1):
-        train(args, model, device, train_loader, optimizer, epoch)
-        test(args, model, device, test_loader)
+        train(model, device, train_loader, optimizer, epoch, args.log_interval)
+        test(model, device, test_loader)
 
     if args.save_model:
         torch.save(model.state_dict(), args.save_path)
+
 
 if __name__ == '__main__':
     main()

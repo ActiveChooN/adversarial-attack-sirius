@@ -27,7 +27,7 @@ def make_model(model, device):
         mdl = ExampleNet()
     return mdl.to(device)
 
-  
+
 def make_optimizer(model, optimizer, lr, momentum):
     if optimizer == 'SGD':
         return optim.SGD(model.parameters(), lr=lr, momentum=momentum)
@@ -69,20 +69,20 @@ def train(model, device, train_loader, optimizer, epoch, log_interval):
                 100. * batch_idx / len(train_loader), loss.item()))
             writer.add_scalar('Loss/train', loss.item(), batch_idx)
         entry = {
-                    'grad_' + name: np.linalg.norm(p.grad.data.numpy()) 
-                for name, p in model.named_parameters() if 'weight' in name
+                    'grad_' + name: np.linalg.norm(p.grad.cpu().data.numpy())
+                    for name, p in model.named_parameters() if 'weight' in name
             }
         min_weights = {
-                    'min_weight_' + name: p.min() 
-                for name, p in model.named_parameters() if 'weight' in name
+                    'min_weight_' + name: p.min()
+                    for name, p in model.named_parameters() if 'weight' in name
             }
         max_weights = {
-                'max_weight_' + name: p.max() 
-            for name, p in model.named_parameters() if 'weight' in name
+                'max_weight_' + name: p.max()
+                for name, p in model.named_parameters() if 'weight' in name
         }
         std_weights = {
-                'std_weight_' + name: p.std() 
-            for name, p in model.named_parameters() if 'weight' in name
+                'std_weight_' + name: p.std()
+                for name, p in model.named_parameters() if 'weight' in name
         }
         for name in entry:
             writer.add_scalar(name, entry[name], batch_idx)
@@ -92,10 +92,10 @@ def train(model, device, train_loader, optimizer, epoch, log_interval):
             writer.add_scalar(name, max_weights[name], batch_idx)
         for name in std_weights:
             writer.add_scalar(name, std_weights[name], batch_idx)
-        #writer.add_image('Image', data[0], batch_idx)  # Tensor
+        # writer.add_image('Image', data[0], batch_idx)  # Tensor
 
 
-def test(model, device, test_loader):
+def test(model, device, test_loader, lr, optimizer):
     writer = SummaryWriter()
     model.eval()
     test_loss = 0
@@ -116,11 +116,10 @@ def test(model, device, test_loader):
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
-    writer.add_hparams({'lr': args.lr, 'optimizer': args.optimizer}, {'loss': test_loss, 'accuracy': 100. * correct / len(test_loader.dataset)})
+    writer.add_hparams({'lr': lr, 'optimizer': optimizer}, {'loss': test_loss, 'accuracy': 100. * correct / len(test_loader.dataset)})
 
 
 def main():
-    
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--model', choices=['example'], default='example',
@@ -166,8 +165,8 @@ def main():
 
     kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
 
-    train_loader, test_loader = make_data(args, kwargs)
-    model = make_model(args, device)
+    train_loader, test_loader = make_data(**kwargs)
+    model = make_model(args.model, device)
     optimizer = make_optimizer(model, optimizer=args.optimizer, lr=args.lr,
                                momentum=args.momentum)
 
@@ -176,7 +175,7 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         train(model, device, train_loader, optimizer, epoch, args.log_interval)
-        test(model, device, test_loader)
+        test(model, device, test_loader, args.lr, args.optimizer)
 
     if args.save_model:
         torch.save(model.state_dict(), args.save_path)

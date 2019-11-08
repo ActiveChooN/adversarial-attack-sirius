@@ -16,6 +16,15 @@ from torch.autograd import Variable
 from models import ExampleNet
 
 
+class Counter:
+    def __init__(self):
+        self.v = 0
+
+    def get(self, value=0):
+        self.v += value
+        return self.v - value
+
+
 def make_data(dataset, **kwargs):
     if dataset == "MNIST":
         return make_data_mnist(**kwargs)
@@ -53,9 +62,9 @@ def make_data_mnist(train_batch_size, test_batch_size, num_workers,
     return train_loader, test_loader
 
 
-def train(model, device, train_loader, optimizer, epoch, log_interval):
+def train(model, device, train_loader, optimizer, epoch, log_interval,
+          summary_writer, summary_step):
     model.train()
-    writer = SummaryWriter()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -67,7 +76,7 @@ def train(model, device, train_loader, optimizer, epoch, log_interval):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
-            writer.add_scalar('Loss/train', loss.item(), batch_idx)
+            summary_writer.add_scalar('Loss/train', loss.item(), summary_step.get(1))
         entry = {
                     'grad_' + name: np.linalg.norm(p.grad.cpu().data.numpy())
                     for name, p in model.named_parameters() if 'weight' in name
@@ -85,18 +94,18 @@ def train(model, device, train_loader, optimizer, epoch, log_interval):
                 for name, p in model.named_parameters() if 'weight' in name
         }
         for name in entry:
-            writer.add_scalar(name, entry[name], batch_idx)
+            summary_writer.add_scalar(name, entry[name], summary_step.get())
         for name in min_weights:
-            writer.add_scalar(name, min_weights[name], batch_idx)
+            summary_writer.add_scalar(name, min_weights[name], summary_step.get())
         for name in max_weights:
-            writer.add_scalar(name, max_weights[name], batch_idx)
+            summary_writer.add_scalar(name, max_weights[name], summary_step.get())
         for name in std_weights:
-            writer.add_scalar(name, std_weights[name], batch_idx)
-        # writer.add_image('Image', data[0], batch_idx)  # Tensor
+            summary_writer.add_scalar(name, std_weights[name], summary_step.get())
+        # summary_writer.add_image('Image', data[0], summary_step.get()) #  Tensor
 
 
-def test(model, device, test_loader, lr, optimizer):
-    writer = SummaryWriter()
+def test(model, device, test_loader, lr, optimizer, summary_writer, 
+         summary_step):
     model.eval()
     test_loss = 0
     correct = 0
@@ -112,15 +121,19 @@ def test(model, device, test_loader, lr, optimizer):
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
+    accuracy = correct / len(test_loader.dataset)
 
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
-        100. * correct / len(test_loader.dataset)))
-    writer.add_hparams({'lr': lr, 'optimizer': optimizer}, {'loss': test_loss, 'accuracy': 100. * correct / len(test_loader.dataset)})
+        100. * accuracy))
+    summary_writer.add_scalar('Loss/test', test_loss, summary_step.get())
+    summary_writer.add_scalar('Accuracy', accuracy, summary_step.get())
+
+    return test_loss, accuracy
 
 
 def main():
-    # Training settings
+    # Training settingsя
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--model', choices=['example'], default='example',
                         help='model name')
@@ -165,6 +178,9 @@ def main():
 
     kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
 
+    summary_writer = SummaryWriter()
+    summary_step = Counter()
+
     train_loader, test_loader = make_data(**kwargs)
     model = make_model(args.model, device)
     optimizer = make_optimizer(model, optimizer=args.optimizer, lr=args.lr,
@@ -174,11 +190,18 @@ def main():
         model.load_state_dict(torch.load(args.load_path))
 
     for epoch in range(1, args.epochs + 1):
-        train(model, device, train_loader, optimizer, epoch, args.log_interval)
-        test(model, device, test_loader, args.lr, args.optimizer)
+        train(model, device, train_loader, optimizer, epoch, args.log_interval,
+              summary_writer, summary_step)
+        final_loss, final_accuracy = test(model, device, test_loader, args.lr,
+                                         args.optimizer, summary_writer, 
+                                         summary_step)
 
     if args.save_model:
         torch.save(model.state_dict(), args.save_path)
+
+    summary_writer.add_hparams({'Learning rate': args.lr, 'Optimizer': args.optimizer},
+                               {'loss': final_loss, 'accuracy': 100. * final_accuracy})
+    summary_writer.close()
 
 
 if __name__ == '__main__':

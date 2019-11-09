@@ -1,11 +1,11 @@
 from __future__ import print_function
+from utils.loggers import BaseLogger
 import argparse
 import os
 import numpy as np
 from torchvision.datasets import ImageFolder
 import torch
 import torchvision
-from tensorboardX import SummaryWriter
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -14,15 +14,7 @@ import numpy as np
 from torchvision import datasets, transforms
 from torch.autograd import Variable
 from models import ExampleNet
-
-
-class Counter:
-    def __init__(self):
-        self.v = 0
-
-    def get(self, value=0):
-        self.v += value
-        return self.v - value
+import logging
 
 
 def make_data(dataset, **kwargs):
@@ -63,7 +55,7 @@ def make_data_mnist(train_batch_size, test_batch_size, num_workers,
 
 
 def train(model, device, train_loader, optimizer, epoch, log_interval,
-          summary_writer, summary_step):
+          logger):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
@@ -72,40 +64,41 @@ def train(model, device, train_loader, optimizer, epoch, log_interval,
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item()))
-            summary_writer.add_scalar('Loss/train', loss.item(), summary_step.get(1))
-        entry = {
-                    'grad_' + name: np.linalg.norm(p.grad.cpu().data.numpy())
-                    for name, p in model.named_parameters() if 'weight' in name
-            }
-        min_weights = {
-                    'min_weight_' + name: p.min()
-                    for name, p in model.named_parameters() if 'weight' in name
-            }
-        max_weights = {
-                'max_weight_' + name: p.max()
-                for name, p in model.named_parameters() if 'weight' in name
-        }
-        std_weights = {
-                'std_weight_' + name: p.std()
-                for name, p in model.named_parameters() if 'weight' in name
-        }
-        for name in entry:
-            summary_writer.add_scalar(name, entry[name], summary_step.get())
-        for name in min_weights:
-            summary_writer.add_scalar(name, min_weights[name], summary_step.get())
-        for name in max_weights:
-            summary_writer.add_scalar(name, max_weights[name], summary_step.get())
-        for name in std_weights:
-            summary_writer.add_scalar(name, std_weights[name], summary_step.get())
+        logger.log_train({"epoch": epoch, "loss": loss.item(),
+                          "progress": 100. * batch_idx / len(train_loader)})
+        # if batch_idx % log_interval == 0:
+        #     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+        #         epoch, batch_idx * len(data), len(train_loader.dataset),
+        #         100. * batch_idx / len(train_loader), loss.item()))
+        #     summary_writer.add_scalar('Loss/train', loss.item(), summary_step.get(1))
+        # entry = {
+        #             'grad_' + name: np.linalg.norm(p.grad.cpu().data.numpy())
+        #             for name, p in model.named_parameters() if 'weight' in name
+        #     }
+        # min_weights = {
+        #             'min_weight_' + name: p.min()
+        #             for name, p in model.named_parameters() if 'weight' in name
+        #     }
+        # max_weights = {
+        #         'max_weight_' + name: p.max()
+        #         for name, p in model.named_parameters() if 'weight' in name
+        # }
+        # std_weights = {
+        #         'std_weight_' + name: p.std()
+        #         for name, p in model.named_parameters() if 'weight' in name
+        # }
+        # for name in entry:
+        #     summary_writer.add_scalar(name, entry[name], summary_step.get())
+        # for name in min_weights:
+        #     summary_writer.add_scalar(name, min_weights[name], summary_step.get())
+        # for name in max_weights:
+        #     summary_writer.add_scalar(name, max_weights[name], summary_step.get())
+        # for name in std_weights:
+        #     summary_writer.add_scalar(name, std_weights[name], summary_step.get())
         # summary_writer.add_image('Image', data[0], summary_step.get()) #  Tensor
 
 
-def test(model, device, test_loader, lr, optimizer, summary_writer, 
-         summary_step):
+def test(model, device, test_loader, lr, optimizer, logger):
     model.eval()
     test_loss = 0
     correct = 0
@@ -123,11 +116,7 @@ def test(model, device, test_loader, lr, optimizer, summary_writer,
     test_loss /= len(test_loader.dataset)
     accuracy = correct / len(test_loader.dataset)
 
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
-        test_loss, correct, len(test_loader.dataset),
-        100. * accuracy))
-    summary_writer.add_scalar('Loss/test', test_loss, summary_step.get())
-    summary_writer.add_scalar('Accuracy', accuracy, summary_step.get())
+    logger.log_test({"loss": test_loss, "accuracy": accuracy})
 
     return test_loss, accuracy
 
@@ -166,6 +155,9 @@ def main():
                         help='For Loading the Model')
     parser.add_argument('--load-path', type=str, default='',
                         help='Path for Loading the Model')
+    parser.add_argument('--log-level', choices=['NOTSET', 'DEBUG', 'INFO',
+                        'WARNING', 'ERROR', 'CRITICAL'], default='INFO',
+                        help='log level')
 
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -178,8 +170,8 @@ def main():
 
     kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
 
-    summary_writer = SummaryWriter()
-    summary_step = Counter()
+    logging.basicConfig(format='%(levelname)s: %(message)s',level=getattr(logging, args.log_level.upper(), None))
+    logger = BaseLogger(log_interval=args.log_interval)
 
     train_loader, test_loader = make_data(**kwargs)
     model = make_model(args.model, device)
@@ -191,17 +183,12 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         train(model, device, train_loader, optimizer, epoch, args.log_interval,
-              summary_writer, summary_step)
-        final_loss, final_accuracy = test(model, device, test_loader, args.lr,
-                                         args.optimizer, summary_writer, 
-                                         summary_step)
-
+              logger)
+        test(model, device, test_loader, args.lr, args.optimizer, logger)
     if args.save_model:
         torch.save(model.state_dict(), args.save_path)
 
-    summary_writer.add_hparams({'Learning rate': args.lr, 'Optimizer': args.optimizer},
-                               {'loss': final_loss, 'accuracy': 100. * final_accuracy})
-    summary_writer.close()
+    logger.log_hparams({'Learning rate': args.lr, 'Optimizer': args.optimizer})
 
 
 if __name__ == '__main__':

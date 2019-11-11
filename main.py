@@ -191,8 +191,9 @@ def main():
 
     kwargs = vars(args)
 
-    kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
-    logging.basicConfig(format='%(levelname)s: %(message)s',level=getattr(logging, args.log_level.upper(), None))
+    kwargs.update({'pin_memory': True} if use_cuda else {'pin_memory': False})
+
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=getattr(logging, args.log_level.upper(), None))
     logger = BaseLogger(log_interval=args.log_interval)
 
     train_loader, test_loader = make_data(**kwargs)

@@ -176,6 +176,8 @@ def main():
                         help='For Loading the Model')
     parser.add_argument('--load-path', type=str, default='',
                         help='Path for Loading the Model')
+    parser.add_argument('--num-workers', type=int, default=1,
+                        help='how many workers will be started (default: 1)')
     parser.add_argument('--log-level', choices=['NOTSET', 'DEBUG', 'INFO',
                         'WARNING', 'ERROR', 'CRITICAL'], default='INFO',
                         help='log level')

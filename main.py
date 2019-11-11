@@ -155,6 +155,8 @@ def main():
                         help='For Loading the Model')
     parser.add_argument('--load-path', type=str, default='',
                         help='Path for Loading the Model')
+    parser.add_argument('--num-workers', type=int, default=1,
+                        help='how many workers will be started (default: 1)')
     parser.add_argument('--log-level', choices=['NOTSET', 'DEBUG', 'INFO',
                         'WARNING', 'ERROR', 'CRITICAL'], default='INFO',
                         help='log level')
@@ -168,9 +170,9 @@ def main():
 
     kwargs = vars(args)
 
-    kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
+    kwargs.update({'pin_memory': True} if use_cuda else {'pin_memory': False})
 
-    logging.basicConfig(format='%(levelname)s: %(message)s',level=getattr(logging, args.log_level.upper(), None))
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=getattr(logging, args.log_level.upper(), None))
     logger = BaseLogger(log_interval=args.log_interval)
 
     train_loader, test_loader = make_data(**kwargs)

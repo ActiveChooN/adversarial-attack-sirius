@@ -21,8 +21,8 @@ class BaseLogger:
         self._final_loss = logs_dict["loss"]
         logging.info(f'----------------------------------------\n'
                      f'TEST: Avg. loss: {logs_dict["loss"]:.5f}, '
-                     f'Accuracy: {logs_dict["accuracy"]:.5f}\n'
-                     f'----------------------------------------')
+                     f'Accuracy: {logs_dict["accuracy"]:.5f}')
+        logging.info(f'----------------------------------------')
         if self.__cometml_api_key:
             self.experiment.log_metrics(logs_dict, prefix='Test')
 

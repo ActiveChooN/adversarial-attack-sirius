@@ -20,6 +20,8 @@ import logging
 def make_data(dataset, **kwargs):
     if dataset == "MNIST":
         return make_data_mnist(**kwargs)
+    if dataset == "CIFAR10":
+        return make_data_cifar10(**kwargs)
 
 
 def make_model(model, device):
@@ -51,6 +53,25 @@ def make_data_mnist(train_batch_size, test_batch_size, num_workers,
                        ])),
         batch_size=test_batch_size, shuffle=True, num_workers=num_workers,
         pin_memory=pin_memory)
+    return train_loader, test_loader
+
+def make_data_cifar10(train_batch_size, test_batch_size, num_workers,
+                    pin_memory, **kwargs):
+    transform = transforms.Compose(
+        [transforms.ToTensor(),
+         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                            download=True, transform=transform)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
+                                              shuffle=True, num_workers=num_workers,
+                                              pin_memory=pin_memory)
+
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                           download=True, transform=transform)
+    test_loader = torch.utils.data.DataLoader(testset, batch_size=test_batch_size,
+                                             shuffle=False, num_workers=num_workers,
+                                             pin_memory=pin_memory)
     return train_loader, test_loader
 
 
@@ -126,7 +147,7 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--model', choices=['example'], default='example',
                         help='model name')
-    parser.add_argument('--dataset', choices=['MNIST'], default='MNIST',
+    parser.add_argument('--dataset', choices=['MNIST', 'CIFAR10'], default='MNIST',
                         help='dataset')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -169,7 +190,7 @@ def main():
     kwargs = vars(args)
 
     kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
-
+    print(kwargs)
     logging.basicConfig(format='%(levelname)s: %(message)s',level=getattr(logging, args.log_level.upper(), None))
     logger = BaseLogger(log_interval=args.log_interval)
 

@@ -192,7 +192,6 @@ def main():
     kwargs = vars(args)
 
     kwargs.update({'num_workers': 1, 'pin_memory': True}) if use_cuda else {}
-    print(kwargs)
     logging.basicConfig(format='%(levelname)s: %(message)s',level=getattr(logging, args.log_level.upper(), None))
     logger = BaseLogger(log_interval=args.log_interval)
 

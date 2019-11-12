@@ -1,0 +1,68 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}Sirius adversarial attack demo{% endblock %}
+
+{% block scripts %}
+  {{super()}}
+  <script src="https://kit.fontawesome.com/350d3689ae.js" crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block navbar %}
+  <nav class="navbar navbar-light" style="background-color: #e3f2fd;">
+    <a class="navbar-brand mr-auto" href="#">Sirius adversarial attack demo</a>
+    <ul class="nav navbar-nav navbar-right my-2 mr-2">
+      <li><a class="nav-link text-dark" href="https://github.com/ActiveChooN/adversarial-attack-sirius">
+        <i class="fab fa-github mr-1 text-dark"></i>GitHub
+      </a></li>
+    </ul>
+  </nav>
+{% endblock %}
+
+{% block content %}
+  <div class="container mt-5">
+    <h2>REVNet Adversarial Vulnerability Example</h1>
+    <span  class="lead">
+        An attack on image classifiers introduces unpredictable behavior for many computer vision systems.
+        This demo introduces 
+    </span>
+    <form method="POST" enctype="multipart/form-data">
+      <div class="form-row mt-5">
+        <div class="form-group col-sm-6">
+          {{ form.image1.label }}
+          {{ form.image1 }}
+        </div>
+        <div class="form-group col-sm-6">
+          {{ form.image2.label }}
+          {{ form.image2 }}
+        </div>
+        <div class="col-sm-6"></div>
+        <div class="col-sm-6">
+          <button type="submit" class="btn btn-primary ">Submit</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  {% if is_post %}
+  <div class="container mt-4">
+    <div class="row">
+      <div class="col-sm-6">
+        <h4>First input image</h4>
+        <img src="{{ '/'.join(in_filename1.split('/')[1:]) }}" width="300"/>
+      </div>
+      <div class="col-sm-6">
+          <h4>Second input image</h4>
+          <img src="{{ '/'.join(in_filename2.split('/')[1:]) }}" width="300"/>
+      </div>
+    </div>
+    <div class="row mt-4">
+      <div class="col-sm-6">
+        <h4>Spoofed image from REVNet</h4>
+        <img src="static/output1.jpg" width="300"/>
+      </div>
+      <div class="col-sm-6">
+          <h4>Spoofed image from iREVNet</h4>
+          <img src="static/output2.jpg" width="300"/>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}

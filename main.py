@@ -1,16 +1,13 @@
-from __future__ import print_function
 from utils.loggers import BaseLogger
 import argparse
 import os
 import numpy as np
-from torchvision.datasets import ImageFolder
 import torch
 import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from PIL import Image
-import numpy as np
+from torchvision.datasets import ImageFolder
 from torchvision import datasets, transforms
 from torch.autograd import Variable
 from models import ExampleNet

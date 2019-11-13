@@ -1,0 +1,297 @@
+from einops.layers.torch import Rearrange
+import torch
+from torch import nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+from memcnn import ReversibleBlock
+
+transform = transforms.Compose([transforms.ToTensor()])
+train = datasets.CIFAR10(root='./datasets', train=True, download=True, transform=transform)
+test = datasets.CIFAR10(root='./datasets',train=False,download=True, transform=transform)
+
+dataloader_train = DataLoader(train, batch_size=2000, shuffle=True)
+dataloader_test = DataLoader(test, batch_size=2000, shuffle=False)
+
+class BottleNeck(nn.Module):
+
+    def __init__(self, c):
+        super(BottleNeck, self).__init__()
+        self.conv1x1_1 = nn.Conv2d(in_channels=c,out_channels=c,kernel_size=(1,1))
+        self.conv3x3 = nn.Conv2d(in_channels=c,out_channels=c,kernel_size=(3,3),padding=1)
+        self.conv1x1_2 = nn.Conv2d(in_channels=c, out_channels=c, kernel_size=(1,1))
+        self.bn = nn.BatchNorm2d(c)
+        self.bn2 = nn.BatchNorm2d(c)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        y = self.bn(x)
+        y = self.relu(y)
+        y = self.conv1x1_1(y)
+        y = self.bn(y)
+        y = self.relu(y)
+        y = self.conv3x3(y)
+        y = self.bn2(y)
+        y = self.relu(y)
+        y = self.conv1x1_2(y)
+        return y
+
+class IRevNet(nn.Module):
+
+    def __init__(self):
+        super(IRevNet, self).__init__()
+        self.split = Rearrange("b c (w1 w2) (h1 h2) -> b (c w2 h2) w1 h1", w2=2, h2=2)
+        self.block1 = BottleNeck(12)
+        self.block2 = BottleNeck(48)
+        self.block3 = BottleNeck(192)
+        self.block4 = BottleNeck(768)
+        self.flat = nn.Flatten()
+        self.relu = nn.ReLU()
+        self.fc1_transfer = nn.Linear(3072, 10)
+
+    def forward(self,x):
+        y = self.split(x)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.split(y)
+        y = self.block2(y)
+        y = self.block2(y)
+        y = self.block2(y)
+        y = self.block2(y)
+        y = self.split(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.split(y)
+        y = self.block4(y)
+        y = self.block4(y)
+        y = self.flat(y)
+        y = self.relu(y)
+        y = self.fc1_transfer(y)
+        return y
+
+def cross_entropy_transferring(output, target):
+    loss1 = F.cross_entropy(output[:, :10], target)
+    loss2 = F.cross_entropy(output[:, 10:], target)
+    return loss1 - loss2
+
+net = IRevNet()
+net.to(torch.device('cuda'))
+optimizer_other = torch.optim.SGD(list(net.fc1_transfer.parameters()), lr=0.02, momentum=0.9)
+
+
+def train_n_epochs(epochs, delta, lr):
+    optimizer_transferring = torch.optim.SGD(set(net.parameters()), lr=lr, momentum=0.9, weight_decay=10.0E-4)
+    for epoch in range(epochs):
+        for batch in dataloader_train:
+            batch[0] = batch[0].to(torch.device('cuda'))
+            batch[1] = batch[1].to(torch.device('cuda'))
+            optimizer_transferring.zero_grad()
+            optimizer_other.zero_grad()
+            result = net(batch[0])
+            loss = F.cross_entropy(result, batch[1])
+            # loss = cross_entropy_transferring(result, batch[1])
+            # loss_other = F.cross_entropy(result[:,10:],batch[1])
+            # loss.backward(retain_graph=True)
+            # loss_other.backward()
+            loss.backward()
+            print(f"Loss: {loss}")
+            optimizer_transferring.step()
+            # optimizer_other.step()
+        correct = 0
+        total = 0
+        for batch in dataloader_test:
+            batch[0] = batch[0].to(torch.device('cuda'))
+            batch[1] = batch[1].to(torch.device('cuda'))
+            result = net(batch[0])
+            result = torch.argmax(F.softmax(result[:, :10], dim=1), dim=1)
+            for i in range(2000):
+                total += 1
+                if batch[1][i] == result[i]:
+                    correct += 1
+
+        print(f"TEST: {correct / total}")
+        # correct = 0
+        # total = 0
+        # for batch in dataloader_train:
+        #     batch[0] = batch[0].to(torch.device('cuda'))
+        #     batch[1] = batch[1].to(torch.device('cuda'))
+        #     result = net(batch[0])
+        #     result = torch.argmax(F.softmax(result[:, :10], dim=1), dim=1)
+        #     for i in range(2000):
+        #         total += 1
+        #         if batch[1][i] == result[i]:
+        #             correct += 1
+        #
+        # print(f"TRAIN: {correct / total}")
+        print(f"epoch {epoch+delta}")
+
+train_n_epochs(60,0,0.1)
+train_n_epochs(60,25,0.01)
+train_n_epochs(60,50,0.001)
+correct = 0
+total = 0
+for batch in dataloader_train:
+    batch[0] = batch[0].to(torch.device('cuda'))
+    batch[1] = batch[1].to(torch.device('cuda'))
+    result = net(batch[0])
+    result = torch.argmax(F.softmax(result[:, :10], dim=1), dim=1)
+    for i in range(2000):
+        total += 1
+        if batch[1][i] == result[i]:
+            correct += 1
+print(f"TRAIN: {correct / total}")from einops.layers.torch import Rearrange
+import torch
+from torch import nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+from memcnn import ReversibleBlock
+
+transform = transforms.Compose([transforms.ToTensor()])
+train = datasets.CIFAR10(root='./datasets', train=True, download=True, transform=transform)
+test = datasets.CIFAR10(root='./datasets',train=False,download=True, transform=transform)
+
+dataloader_train = DataLoader(train, batch_size=2000, shuffle=True)
+dataloader_test = DataLoader(test, batch_size=2000, shuffle=False)
+
+class BottleNeck(nn.Module):
+
+    def __init__(self, c):
+        super(BottleNeck, self).__init__()
+        self.conv1x1_1 = nn.Conv2d(in_channels=c,out_channels=c,kernel_size=(1,1))
+        self.conv3x3 = nn.Conv2d(in_channels=c,out_channels=c,kernel_size=(3,3),padding=1)
+        self.conv1x1_2 = nn.Conv2d(in_channels=c, out_channels=c, kernel_size=(1,1))
+        self.bn = nn.BatchNorm2d(c)
+        self.bn2 = nn.BatchNorm2d(c)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        y = self.bn(x)
+        y = self.relu(y)
+        y = self.conv1x1_1(y)
+        y = self.bn(y)
+        y = self.relu(y)
+        y = self.conv3x3(y)
+        y = self.bn2(y)
+        y = self.relu(y)
+        y = self.conv1x1_2(y)
+        return y
+
+class IRevNet(nn.Module):
+
+    def __init__(self):
+        super(IRevNet, self).__init__()
+        self.split = Rearrange("b c (w1 w2) (h1 h2) -> b (c w2 h2) w1 h1", w2=2, h2=2)
+        self.block1 = BottleNeck(12)
+        self.block2 = BottleNeck(48)
+        self.block3 = BottleNeck(192)
+        self.block4 = BottleNeck(768)
+        self.flat = nn.Flatten()
+        self.relu = nn.ReLU()
+        self.fc1_transfer = nn.Linear(3072, 10)
+
+    def forward(self,x):
+        y = self.split(x)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.block1(y)
+        y = self.split(y)
+        y = self.block2(y)
+        y = self.block2(y)
+        y = self.block2(y)
+        y = self.block2(y)
+        y = self.split(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.block3(y)
+        y = self.split(y)
+        y = self.block4(y)
+        y = self.block4(y)
+        y = self.flat(y)
+        y = self.relu(y)
+        y = self.fc1_transfer(y)
+        return y
+
+def cross_entropy_transferring(output, target):
+    loss1 = F.cross_entropy(output[:, :10], target)
+    loss2 = F.cross_entropy(output[:, 10:], target)
+    return loss1 - loss2
+
+net = IRevNet()
+net.to(torch.device('cuda'))
+optimizer_other = torch.optim.SGD(list(net.fc1_transfer.parameters()), lr=0.02, momentum=0.9)
+
+
+def train_n_epochs(epochs, delta, lr):
+    optimizer_transferring = torch.optim.SGD(set(net.parameters()), lr=lr, momentum=0.9, weight_decay=10.0E-4)
+    for epoch in range(epochs):
+        for batch in dataloader_train:
+            batch[0] = batch[0].to(torch.device('cuda'))
+            batch[1] = batch[1].to(torch.device('cuda'))
+            optimizer_transferring.zero_grad()
+            optimizer_other.zero_grad()
+            result = net(batch[0])
+            loss = F.cross_entropy(result, batch[1])
+            # loss = cross_entropy_transferring(result, batch[1])
+            # loss_other = F.cross_entropy(result[:,10:],batch[1])
+            # loss.backward(retain_graph=True)
+            # loss_other.backward()
+            loss.backward()
+            print(f"Loss: {loss}")
+            optimizer_transferring.step()
+            # optimizer_other.step()
+        correct = 0
+        total = 0
+        for batch in dataloader_test:
+            batch[0] = batch[0].to(torch.device('cuda'))
+            batch[1] = batch[1].to(torch.device('cuda'))
+            result = net(batch[0])
+            result = torch.argmax(F.softmax(result[:, :10], dim=1), dim=1)
+            for i in range(2000):
+                total += 1
+                if batch[1][i] == result[i]:
+                    correct += 1
+
+        print(f"TEST: {correct / total}")
+        # correct = 0
+        # total = 0
+        # for batch in dataloader_train:
+        #     batch[0] = batch[0].to(torch.device('cuda'))
+        #     batch[1] = batch[1].to(torch.device('cuda'))
+        #     result = net(batch[0])
+        #     result = torch.argmax(F.softmax(result[:, :10], dim=1), dim=1)
+        #     for i in range(2000):
+        #         total += 1
+        #         if batch[1][i] == result[i]:
+        #             correct += 1
+        #
+        # print(f"TRAIN: {correct / total}")
+        print(f"epoch {epoch+delta}")
+
+train_n_epochs(60,0,0.1)
+train_n_epochs(60,25,0.01)
+train_n_epochs(60,50,0.001)
+correct = 0
+total = 0
+for batch in dataloader_train:
+    batch[0] = batch[0].to(torch.device('cuda'))
+    batch[1] = batch[1].to(torch.device('cuda'))
+    result = net(batch[0])
+    result = torch.argmax(F.softmax(result[:, :10], dim=1), dim=1)
+    for i in range(2000):
+        total += 1
+        if batch[1][i] == result[i]:
+            correct += 1
+print(f"TRAIN: {correct / total}")

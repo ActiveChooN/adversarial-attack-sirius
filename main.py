@@ -27,6 +27,19 @@ def make_data(dataset, **kwargs):
         return make_data_cifar10(**kwargs)
 
 
+def make_loss(model):
+    if model == "example":
+        return F.nll_loss
+
+
+def make_metrics(metrics_set):
+    if metrics_set == "default":
+        return {
+            "accuracy": Accuracy(),
+            "loss": Loss(F.nll_loss)
+        }
+
+
 def make_model(model, device):
     mdl = object()
     if model == "example":
@@ -109,6 +122,8 @@ def main():
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging ' +
                         'training status')
+    parser.add_argument('--metrics', choices=["default"], default="default",
+                        help="Metrics set for the evaluator")
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
     parser.add_argument('--save-path', type=str, default='',
@@ -138,6 +153,8 @@ def main():
     model = make_model(args.model, device)
     optimizer = make_optimizer(model, optimizer=args.optimizer, lr=args.lr,
                                momentum=args.momentum)
+    loss_fn = make_loss(args.model)
+    metrics = make_metrics(args.metrics)
 
     if args.load_model:
         model.load_state_dict(torch.load(args.load_path))
@@ -147,11 +164,8 @@ def main():
     logger = BaseLogger(log_interval=args.log_interval,
                         train_len=len(train_loader))
 
-    trainer = create_supervised_trainer(model, optimizer, F.nll_loss, device)
-    evaluator = create_supervised_evaluator(model, metrics={
-        'accuracy': Accuracy(),
-        'loss': Loss(F.nll_loss)
-    }, device=device)
+    trainer = create_supervised_trainer(model, optimizer, loss_fn, device)
+    evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
 
     @trainer.on(Events.ITERATION_COMPLETED)
     def log_training_loss(engine):

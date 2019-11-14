@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+
 class ExampleNet(nn.Module):
     def __init__(self):
         super(ExampleNet, self).__init__()
